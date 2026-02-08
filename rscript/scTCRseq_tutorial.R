@@ -88,6 +88,7 @@ clonalOccupy(seurat_obj,
   scale_fill_manual(values = color_palette)
 
 
+
 vizGenes(combined_tcr, 
          #gene = "VTRB", 
          plot = "heatmap", 
@@ -101,3 +102,46 @@ diversity_stats <- clonalDiversity(combined_tcr,
                                    group.by = "sample")
 print(diversity_stats)
 
+
+
+# View the most expanded clonotypes in your combined object
+top_clones <- seurat_obj@meta.data %>%
+  filter(!is.na(CTnt)) %>% # Filter out cells with no TCR
+  group_by(CTnt, celltype) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+head(top_clones)
+
+# Highlight the top 5 most frequent clonotypes
+# 1. Get the sequences of the top 5 clones
+top_5_sequences <- head(top_clones$CTnt, 5)
+# 2. Create a new metadata column
+# We default to "Other", then label only the top 5
+seurat_obj$highlight_clones <- ifelse(seurat_obj$CTnt %in% top_5_sequences, 
+                                      seurat_obj$CTnt, 
+                                      "Other")
+# 3. Plot using DimPlot
+DimPlot(seurat_obj, group.by = "highlight_clones", cols = c("red", "blue", "green", "purple", "orange", "grey")) +
+  ggtitle("Top 5 Expanded Clonotypes")
+# This will show you which specific VDJ sequences are shared across samples
+clonalCompare(combined_tcr, 
+              samples = samples, 
+              cloneCall="strict", 
+              graph = "alluvial")
+
+
+#2. Pseudotime######
+library(SeuratWrappers)
+library(monocle3)
+
+# Convert and run
+cds <- as.cell_data_set(seurat_obj)
+reducedDims(cds)$UMAP <- seurat_obj@reductions$umap@cell.embeddings
+cds <- cluster_cells(cds, reduction_method = "UMAP")
+cds <- learn_graph(cds)
+
+# To visualize the trajectory specifically for your rare cells:
+plot_cells(cds, 
+           color_cells_by = "celltype", 
+           label_groups_by_cluster = FALSE,
+           label_leaves = TRUE)
